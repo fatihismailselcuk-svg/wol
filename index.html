@@ -1,1 +1,39 @@
-
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090e17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<title>PC Wake</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#090e17;color:#f4f7fc}*{box-sizing:border-box}body{margin:0;min-height:100svh;padding:max(24px,env(safe-area-inset-top)) 22px max(24px,env(safe-area-inset-bottom));display:flex;justify-content:center}main{width:100%;max-width:430px;align-self:center}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:43px;height:43px;border-radius:12px}h1{margin:0;font-size:25px;letter-spacing:-.7px}.caption{margin:5px 0 0;color:#94a3b8;font-size:13px}.settings{border:1px solid #293345;background:#141c29;color:#cbd5e1;padding:10px 13px;border-radius:12px;cursor:pointer;font:inherit;font-size:13px}.panel{background:linear-gradient(150deg,#172131,#101722);border:1px solid #263347;border-radius:28px;padding:30px 17px 26px;box-shadow:0 24px 70px #0004}.indicators{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:center}.circle{width:128px;height:128px;border-radius:50%;margin:0 auto 18px;background:#381a23;border:2px solid #f05c6a;box-shadow:0 0 30px #f05c6a14;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ff9aa3;transition:background .3s,border-color .3s,color .3s}.circle.online{background:#10332c;border-color:#40d89a;color:#70f0b7;box-shadow:0 0 30px #40d89a18}.circle svg{width:47px;height:47px;stroke:currentColor;stroke-width:1.8;fill:none}.circle strong{font-size:27px;letter-spacing:-1px}.circle small{font-size:12px;margin-top:4px;opacity:.8}h2{font-size:15px;margin:0 0 7px;font-weight:600}.state{font-size:12px;color:#b0bed0;min-height:30px;margin:0}.wake{margin-top:25px;width:100%;border:0;border-radius:18px;background:#4c8eff;color:white;min-height:64px;font:inherit;font-size:20px;font-weight:650;display:flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;box-shadow:0 10px 25px #3c7ae929}.wake svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2}.wake:disabled{opacity:.5;cursor:default}.wake:active{transform:scale(.985)}.info{text-align:center;color:#a7b5c8;font-size:13px;line-height:1.65;min-height:44px;margin:18px 6px 0}.info.error{color:#ff9aa3}.bottom{margin:23px 0 0;text-align:center;font-size:12px;line-height:1.9;color:#73839b}.refresh{background:none;color:#b7c7df;border:0;font:inherit;text-decoration:underline;cursor:pointer;padding:8px}.form{margin-top:18px;background:#141c29;border:1px solid #293345;border-radius:20px;padding:20px}.form h2{font-size:18px;margin-bottom:10px}.form p{font-size:13px;color:#a7b5c8;line-height:1.6}label{display:block;font-size:13px;margin:14px 0 7px}input{width:100%;border:1px solid #38475e;border-radius:10px;background:#090e17;color:#f4f7fc;padding:13px;font:inherit;font-size:16px}input:focus{outline:2px solid #4c8eff}.save{width:100%;border:0;border-radius:12px;background:#4c8eff;color:white;padding:14px;font:inherit;font-weight:600;margin-top:18px}[hidden]{display:none!important}button:focus-visible{outline:3px solid #c4dcff;outline-offset:4px}@media(max-width:350px){.circle{width:111px;height:111px}.panel{padding-inline:10px}body{padding-inline:15px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="brand"><img src="./icon-192.png" alt=""><div><h1>PC Wake</h1><p class="caption">Bilgisayarın bir dokunuş uzakta.</p></div></div><button class="settings" id="settings" aria-expanded="false">Ayarlar</button></header>
+<section class="panel" aria-label="Cihaz durumları">
+<div class="indicators">
+<div><div id="pcCircle" class="circle" role="img" aria-label="PC durumu bilinmiyor"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="26" rx="4"/><path d="M24 34v7M15 41h18"/></svg></div><h2>PC durumu</h2><p class="state" id="pcState">Bilgi bekleniyor</p></div>
+<div><div id="espCircle" class="circle" role="img" aria-label="ESP32 durumu bilinmiyor"><strong id="rssi">—</strong><small>dBm</small></div><h2>ESP32 durumu</h2><p class="state" id="espState">Bilgi bekleniyor</p></div>
+</div>
+<button class="wake" id="wake" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v10M6 5.5a9 9 0 1 0 12 0"/></svg><span id="wakeText">Wake</span></button>
+<p class="info" id="message" role="status" aria-live="polite">Başlamak için bağlantı ayarlarını kaydet.</p>
+</section>
+<form class="form" id="configForm" hidden>
+<h2>Bağlantı ayarları</h2><p>Apps Script adresini ve PHONE_TOKEN değerini gir. Ayarlar bu cihazda saklanır.</p>
+<label for="endpoint">Apps Script adresi</label><input id="endpoint" type="url" required spellcheck="false" autocomplete="off">
+<label for="token">PHONE_TOKEN</label><input id="token" type="password" required spellcheck="false" autocomplete="off" placeholder="Code.gs içindeki PHONE_TOKEN">
+<button class="save" type="submit">Kaydet ve bağlan</button>
+</form>
+<div class="bottom"><div id="updated">Henüz rapor alınmadı</div><button class="refresh" id="refresh">Şimdi yenile</button><div>Durumlar ESP32’nin son raporuna göre gösterilir.</div></div>
+</main>
+<script src="./state.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
