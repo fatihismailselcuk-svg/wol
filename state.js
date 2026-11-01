@@ -1,11 +1,20 @@
+/* Device presentation state from retained MQTT values (no false age assumptions). */
 (function(root){
-  function deviceState(data,now=Date.now(),receivedAt=now){
-    const check=Date.parse(data?.lastCheck);
-    const fresh=!!data && data.espOnline===true && Number.isFinite(check) && now-check<60000 && now-check>=-60000 && now-receivedAt<60000;
-    return {esp:fresh,pc:fresh && data.pcReachable===true,
-      pcText:!fresh?'Güncel bilgi yok':data.pcReachable===true?'Ping yanıtı var':data.pcReachable===false?'Ping yanıtı yok':'Bilgi yok',
-      espText:fresh?'İnternete bağlı':'Güncel bağlantı yok',
-      rssi:fresh && Number.isFinite(data.rssi)?String(data.rssi):'—'};
+  function deviceState(data){
+    const connected=data?.connected===true;
+    const esp=connected && data?.espOnline===true;
+    const rawPc=data?.pcStatus;
+    const known=esp && (rawPc==='ON'||rawPc==='OFF');
+    const pc=known && rawPc==='ON';
+    const rssi=esp && Number.isFinite(data?.rssi) && data.rssi<=0 && data.rssi>=-120 ? Math.round(data.rssi) : null;
+    return {
+      esp,pc,known,rssi,
+      espMetric:rssi===null?(esp?'ON':'—'):String(rssi),
+      espUnit:rssi===null?'MQTT':'dBm',
+      espText:!connected?'MQTT bağlantısı yok':esp?'İnternete bağlı':data?.espOnline===false?'ESP32 çevrimdışı':'ESP32 durumu bekleniyor',
+      pcText:!connected?'Güncel bilgi yok':!esp?'ESP32 yanıtı bekleniyor':
+        rawPc==='ON'?'Ping yanıtı var':rawPc==='OFF'?'Ping yanıtı yok':'PC durumu bekleniyor'
+    };
   }
   if(typeof module!=='undefined')module.exports=deviceState;
   else root.deviceState=deviceState;
