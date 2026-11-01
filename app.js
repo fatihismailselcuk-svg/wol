@@ -5,9 +5,11 @@ const WSS_URL=`wss://${BROKER}:8084/mqtt`;
 const SETTINGS_KEY='pc-wake-mqtt-settings-v1';
 const TOPIC_WAKE='ev/wol/command';
 const TOPIC_PC='ev/wol/pc/status';
+const TOPIC_CHECK='ev/wol/pc/check';
 const TOPIC_ESP='ev/wol/esp/status';
 let saved={},credentials=null,client=null,pcStatus=null,espOnline=null,rssi=null;
 let connected=false,waking=false,lastReceived=0,lastStatusRetained=false,clientSerial=0;
+let pcFresh=false,lastPcReplyAt=0,checkTimer=null;
 try{saved=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');}catch{}
 // The old Apps Script API token should not remain at rest in the site's storage.
 try{localStorage.removeItem('pc-wake-settings-v1');}catch{}
@@ -19,7 +21,7 @@ function message(text,error=false){$('message').textContent=text;$('message').cl
 function formVisible(show){$('configForm').hidden=!show;$('settings').setAttribute('aria-expanded',String(show));}
 function formatTime(ms){return new Date(ms).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 function render(){
-  const s=deviceState({connected,espOnline,pcStatus,rssi});
+  const s=deviceState({connected,espOnline,pcStatus:pcFresh?pcStatus:null,rssi});
   $('pcCircle').classList.toggle('online',s.pc);
   $('espCircle').classList.toggle('online',s.esp);
   $('pcCircle').setAttribute('aria-label','PC: '+s.pcText);
@@ -28,11 +30,11 @@ function render(){
   $('espState').textContent=s.espText;
   $('rssi').textContent=s.espMetric;
   $('espMetricLabel').textContent=s.espUnit;
-  $('wake').disabled=!connected||!s.esp||!s.known||s.pc||waking||navigator.onLine===false;
+  $('wake').disabled=!connected||!s.esp||!pcFresh||!s.known||s.pc||waking||navigator.onLine===false;
   $('wakeText').textContent=waking?'Gönderiliyor…':'Wake';
-  $('updated').textContent=lastReceived?
-    'Son MQTT alımı · '+formatTime(lastReceived)+(lastStatusRetained?' (retained)':''):
-    connected?'Durum mesajları bekleniyor':'MQTT bağlantısı yok';
+  $('updated').textContent=pcFresh?
+    'Son PC ping yanıtı · '+formatTime(lastPcReplyAt):
+    connected?'Güncel PC ping yanıtı bekleniyor':'MQTT bağlantısı yok';
   $('connection').textContent=connected?'MQTT bağlı':credentials?(navigator.onLine===false?'Telefon çevrimdışı':'MQTT bağlanıyor…'):'MQTT ayarları gerekli';
   $('connection').classList.toggle('live',connected);
 }
@@ -52,10 +54,17 @@ function randomClientId(){
   const v=new Uint8Array(6);crypto.getRandomValues(v);
   return 'EV_WOL_IPHONE_'+Array.from(v,b=>b.toString(16).padStart(2,'0')).join('');
 }
+function stopChecking(){if(checkTimer!==null){clearInterval(checkTimer);checkTimer=null;}}
+function requestPcCheck(){
+  if(!client||!connected||document.hidden)return;
+  // QoS 1, retain=false. Sonuc broker PUBACK degil, ESP32'nin status mesajidir.
+  client.publish(TOPIC_CHECK,'CHECK').catch(err=>message('PC sorgusu gonderilemedi: '+err.message,true));
+}
 function closeClient(){
+  stopChecking();
   clientSerial++;
   if(client){client.stop();client=null;}
-  connected=false;espOnline=null;pcStatus=null;rssi=null;lastReceived=0;lastStatusRetained=false;
+  connected=false;espOnline=null;pcStatus=null;rssi=null;lastReceived=0;lastStatusRetained=false;pcFresh=false;lastPcReplyAt=0;
   render();
 }
 function startClient(){
@@ -67,14 +76,20 @@ function startClient(){
     url:WSS_URL,username:credentials.username,password:credentials.password,clientId:randomClientId(),
     onConnect(){
       if(serial!==clientSerial)return;
-      connected=true;pcStatus=null;espOnline=null;rssi=null;
-      message('MQTT bağlandı. ESP32 ve PC durumu alınıyor…');
+      connected=true;pcStatus=null;espOnline=null;rssi=null;pcFresh=false;lastPcReplyAt=0;
+      message('MQTT baglandi. PC icin ilk ping kontrolu isteniyor…');
       instance.subscribe([TOPIC_PC,TOPIC_ESP]);
+      requestPcCheck();
+      stopChecking();
+      checkTimer=setInterval(()=>{
+        if(lastPcReplyAt && Date.now()-lastPcReplyAt>25000){pcFresh=false;render();}
+        requestPcCheck();
+      },10000);
       render();
     },
     onDisconnect(reason){
       if(serial!==clientSerial)return;
-      connected=false;pcStatus=null;espOnline=null;rssi=null;
+      stopChecking();connected=false;pcStatus=null;espOnline=null;rssi=null;pcFresh=false;lastPcReplyAt=0;
       message(reason||'MQTT bağlantısı kesildi; tekrar bağlanılıyor.',true);
       render();
     },
@@ -83,12 +98,15 @@ function startClient(){
       if(topic===TOPIC_PC){
         const value=payload.trim().toUpperCase();
         pcStatus=['ON','OFF','UNKNOWN'].includes(value)?value:null;
+        // Retained = onceki ping sonucu; canli yayin = yeni CHECK'in yaniti.
+        if(meta?.retain||!['ON','OFF'].includes(value))pcFresh=false;
+        else {pcFresh=true;lastPcReplyAt=Date.now();}
       } else if(topic===TOPIC_ESP){parseEspStatus(payload);}
       else return;
       lastReceived=Date.now();lastStatusRetained=!!meta?.retain;
       if(!waking){
-        const s=deviceState({connected,espOnline,pcStatus,rssi});
-        if(s.esp&&s.pc)message('PC açık. Ping yanıtı alınıyor.');
+        const s=deviceState({connected,espOnline,pcStatus:pcFresh?pcStatus:null,rssi});
+        if(s.esp&&s.pc)message('PC açık. Güncel ping yanıtı alındı.');
         else if(s.esp&&s.known)message('PC kapalı. Açmak için Wake düğmesine dokun.');
         else if(espOnline===false)message('ESP32 çevrimdışı. Wake komutu gönderilemez.',true);
       }
@@ -136,8 +154,7 @@ $('forget').addEventListener('click',()=>{
 $('refresh').addEventListener('click',()=>{
   if(!credentials){formVisible(true);message('Önce MQTT bağlantı bilgilerini gir.');return;}
   if(client&&connected){
-    // Re-subscribe sends retained statuses immediately without extra topics/HTTP calls.
-    client.subscribe([TOPIC_PC,TOPIC_ESP]);message('MQTT üzerinden son durum isteniyor…');
+    message('PC icin yeni ping kontrolu istendi…');requestPcCheck();
   }else startClient();
 });
 window.addEventListener('online',()=>{if(credentials)startClient();});

@@ -1,4 +1,4 @@
-const CACHE='pc-wake-mqtt-v2';
+const CACHE='pc-wake-mqtt-v2-1';
 const FILES=['./','./index.html','./app.js','./state.js','./mqtt-wss.js','./manifest.json','./icon-180.png','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('pc-wake-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
